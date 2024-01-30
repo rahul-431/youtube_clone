@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import connectDB from "./db/db_connection.js";
+import { app } from "./app.js";
 dotenv.config({
   path: "./env",
 });
@@ -16,7 +17,7 @@ connectDB()
     });
   })
   .catch((error) => {
-    console.log("Mongodb connection failed :" + error);
+    console.log("Mongodb connection failed(1) :" + error);
   });
 
 //following is not the best approach to connect with database;

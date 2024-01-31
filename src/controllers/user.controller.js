@@ -117,7 +117,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   //getting data from client
   const { email, password, username } = req.body;
-
+  console.log("a:", email, password, username);
   //empty validation
   if ((!email || !username) && !password) {
     throw new ApiError("Username or email or password is required");
@@ -125,7 +125,6 @@ const loginUser = asyncHandler(async (req, res) => {
 
   // check if email does not exist
   const user = await User.findOne({ $or: [{ email }, { username }] });
-  console.log("before adding refresh token: " + user);
   if (!user) {
     throw new ApiError(
       400,
@@ -140,9 +139,10 @@ const loginUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
     user._id
   );
-  user.refreshToken = refreshToken;
-  console.log("after adding refresh token: " + user);
-  const loggedInUser = user.select("-password -refreshToken");
+
+  const loggedInUser = User.findById(user._id).select(
+    "-password -refreshToken"
+  );
 
   //sending access token in cookie
   //after adding this option true then cookie can not be modified by the client side
@@ -155,18 +155,19 @@ const loginUser = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken)
+    .cookie("refreshToken", refreshToken, options)
     .json(
       new ApiResponse(
         201,
-        { user: loggedInUser, accessToken, refreshToken },
+        { user: user, accessToken, refreshToken },
         "user is logged in successfully"
       )
     );
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
-  User.findByIdAndUpdate(
+  // console.log(req.user._id);
+  await User.findByIdAndUpdate(
     req.user._id,
     {
       $set: {

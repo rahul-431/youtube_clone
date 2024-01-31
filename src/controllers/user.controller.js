@@ -3,6 +3,25 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.models.js";
 import { upload } from "../utils/fileUpload.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+
+const generateAccessAndRefreshToken = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+    user.refreshToken = refreshToken;
+
+    //saving the refresh token to database
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while generating refresh and access token"
+    );
+  }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   //get user details from frontend
   //validation not-empty
@@ -25,6 +44,7 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   //check if user already exist or not
+  //this $or is a mongodb's operator
   const existedUser = await User.findOne({ $or: [{ username }, { email }] });
   if (existedUser) {
     throw new ApiError(409, "User with username or email is already exist");
@@ -86,4 +106,85 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createdUser, "User registered successfully"));
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  //---steps
+  //get the email,username,password
+  // empty validation
+  //check if email exist or not
+  // then check the password
+  //generate both accesstoken and refresh token
+  //send secured cookie
+
+  //getting data from client
+  const { email, password, username } = req.body;
+
+  //empty validation
+  if ((!email || !username) && !password) {
+    throw new ApiError("Username or email or password is required");
+  }
+
+  // check if email does not exist
+  const user = await User.findOne({ $or: [{ email }, { username }] });
+  console.log("before adding refresh token: " + user);
+  if (!user) {
+    throw new ApiError(
+      400,
+      `User with ${email || username} does not exist, please register first`
+    );
+  }
+  //check password
+  const isPasswordValid = await user.isPasswordCorrect(password);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Password is incorrect");
+  }
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user._id
+  );
+  user.refreshToken = refreshToken;
+  console.log("after adding refresh token: " + user);
+  const loggedInUser = user.select("-password -refreshToken");
+
+  //sending access token in cookie
+  //after adding this option true then cookie can not be modified by the client side
+  // so we must need to set these options true while sending cookie
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken)
+    .json(
+      new ApiResponse(
+        201,
+        { user: loggedInUser, accessToken, refreshToken },
+        "user is logged in successfully"
+      )
+    );
+});
+
+const logoutUser = asyncHandler(async (req, res) => {
+  User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User Logged out successfully"));
+});
+export { registerUser, loginUser, logoutUser };

@@ -1,8 +1,7 @@
-import { User } from "../models/user.models";
-import { ApiError } from "../utils/ApiError";
-import { asyncHandler } from "../utils/asyncHandler";
-import { Jwt } from "jsonwebtoken";
-
+import { User } from "../models/user.models.js";
+import { ApiError } from "../utils/ApiError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import jwt from "jsonwebtoken";
 //if res is not used here then we can replace that with '_'
 export const verifyJwt = asyncHandler(async (req, _, next) => {
   try {
@@ -12,7 +11,7 @@ export const verifyJwt = asyncHandler(async (req, _, next) => {
     if (!token) {
       throw new ApiError(401, "Unauthorized request");
     }
-    const decodedToken = Jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
     const user = User.findById(decodedToken?._id).select(
       "-password -refreshToken"
@@ -23,6 +22,6 @@ export const verifyJwt = asyncHandler(async (req, _, next) => {
     req.user = user;
     next();
   } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid access token");
+    throw new ApiError(401, error?.message || "Invalid access token", error);
   }
 });
